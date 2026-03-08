@@ -5,66 +5,78 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  subscription: Visual Studio Enterprise(39d9d727-1dbb-4b72-9a25-f5b2c5fe476a)
-  resourceGroup: resourcegroup-tfstate
-  storageAccount: terraformtfstateskip
-  container: tfstate
-  tfstateFile: terraform.tfstate
-  anyTfChanges: false
+  subscription: 'Visual Studio Enterprise (39d9d727-1dbb-4b72-9a25-f5b2c5fe476a)'
+  resourceGroup: 'resourcegroup-tfstate'
+  storageAccount: 'terraformtfstateskip'
+  container: 'tfstate'
+  tfstateFile: 'terraform.tfstate'
+  anyTfChanges: 'false'
+  azureServiceConnection: 'azure new'
 
 steps:
 
-- task: TerraformInstaller@1
+- task: JasonBJohnson.azure-pipelines-tasks-terraform.azure-pipelines-tasks-terraform-installer.TerraformInstaller@1
+  displayName: 'Install Terraform'
   inputs:
     terraformVersion: 'latest'
 
 - task: TerraformTaskV1@0
-  displayName: terraform init
+  displayName: 'terraform init'
   inputs:
     provider: 'azurerm'
     command: 'init'
     workingDirectory: '$(System.DefaultWorkingDirectory)/skip-step'
-    backendServiceArm: 'azure new'
+    backendServiceArm: '$(azureServiceConnection)'
     backendAzureRmResourceGroupName: '$(resourceGroup)'
     backendAzureRmStorageAccountName: '$(storageAccount)'
     backendAzureRmContainerName: '$(container)'
     backendAzureRmKey: '$(tfstateFile)'
 
 - task: TerraformTaskV1@0
-  displayName: terraform plan -out=tfplan
+  displayName: 'terraform plan -out=tfplan'
   inputs:
     provider: 'azurerm'
     command: 'plan'
     workingDirectory: '$(System.DefaultWorkingDirectory)/skip-step'
     commandOptions: '-out=tfplan'
-    environmentServiceNameAzureRM: 'azure new'
+    environmentServiceNameAzureRM: '$(azureServiceConnection)'
 
 - task: PowerShell@2
-  displayName: detect any terraform change
+  displayName: 'Detect any terraform change'
   inputs:
     targetType: 'inline'
-    script: |
-      # Write-Host "LASTEXITCODE : $LASTEXITCODE"
-      $plan = $(terraform show -json tfplan | ConvertFrom-Json)
-      $actions = $plan.resource_changes.change.actions
-      Write-Host "Terraform actions : $actions"
-      if (($actions -contains 'create') -or ($actions -contains 'delete') -or ($actions -contains 'update'))
-      {
-        Write-Host "Terraform will perform the following actions : $actions"
-        Write-Host "##vso[task.setvariable variable=anyTfChanges;]true"
-      }
-      else
-      {
-        Write-Host "There is no change detected in Terraform tfplan file"
-      }
+    pwsh: true
     workingDirectory: '$(System.DefaultWorkingDirectory)/skip-step'
+    script: |
+      $planJson = terraform show -json tfplan
+      $plan = $planJson | ConvertFrom-Json
+
+      $actions = @()
+
+      foreach ($resource in $plan.resource_changes) {
+        if ($null -ne $resource.change -and $null -ne $resource.change.actions) {
+          $actions += $resource.change.actions
+        }
+      }
+
+      $actions = $actions | Sort-Object -Unique
+      Write-Host "Terraform actions: $($actions -join ', ')"
+
+      if (($actions -contains 'create') -or ($actions -contains 'update') -or ($actions -contains 'delete')) {
+        Write-Host "Terraform will perform the following actions: $($actions -join ', ')"
+        Write-Host "##vso[task.setvariable variable=anyTfChanges]true"
+      }
+      else {
+        Write-Host "There is no change detected in Terraform tfplan file"
+        Write-Host "##vso[task.setvariable variable=anyTfChanges]false"
+      }
 
 - task: TerraformTaskV1@0
-  displayName: terraform apply tfplan
-  condition: eq(variables.anyTfChanges, true)
+  displayName: 'terraform apply tfplan'
+  condition: eq(variables['anyTfChanges'], 'true')
   inputs:
     provider: 'azurerm'
     command: 'apply'
     workingDirectory: '$(System.DefaultWorkingDirectory)/skip-step'
     commandOptions: 'tfplan'
-    environmentServiceNameAzureRM: 'azure new'
+    environmentServiceNameAzureRM: '$(azureServiceConnection)'
