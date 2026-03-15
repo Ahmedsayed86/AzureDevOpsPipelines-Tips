@@ -21,7 +21,7 @@ steps:
     provider: 'azurerm'
     command: 'init'
     workingDirectory: '$(System.DefaultWorkingDirectory)/skip-step'
-    backendServiceArm: 'azure new'
+    backendServiceArm: '$(azureServiceConnection)'
     backendAzureRmResourceGroupName: '$(resourceGroup)'
     backendAzureRmStorageAccountName: '$(storageAccount)'
     backendAzureRmContainerName: '$(container)'
@@ -34,7 +34,7 @@ steps:
     command: 'plan'
     workingDirectory: '$(System.DefaultWorkingDirectory)/skip-step'
     commandOptions: '-out=tfplan'
-    environmentServiceNameAzureRM: 'azure new'
+    environmentServiceNameAzureRM: '$(azureServiceConnection)'
 
 - task: PowerShell@2
   displayName: 'Detect any terraform change'
@@ -74,4 +74,4 @@ steps:
     command: 'apply'
     workingDirectory: '$(System.DefaultWorkingDirectory)/skip-step'
     commandOptions: 'tfplan'
-    environmentServiceNameAzureRM: 'azure new'
+    environmentServiceNameAzureRM: '$(azureServiceConnection)'
